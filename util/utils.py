@@ -490,6 +490,11 @@ def get_som_labeled_img(image_source: Union[str, Image.Image], model=None, BOX_T
         annotated_frame, label_coordinates = annotate(image_source=image_source, boxes=filtered_boxes, logits=logits, phrases=phrases, **draw_bbox_config)
     else:
         annotated_frame, label_coordinates = annotate(image_source=image_source, boxes=filtered_boxes, logits=logits, phrases=phrases, text_scale=text_scale, text_padding=text_padding)
+
+    # Ensure annotated_frame is not None (safety check)
+    if annotated_frame is None:
+        print("Warning: annotate() returned None, using original image")
+        annotated_frame = image_source
     
     pil_img = Image.fromarray(annotated_frame)
     buffered = io.BytesIO()
