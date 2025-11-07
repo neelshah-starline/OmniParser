@@ -11,7 +11,7 @@ opencv-python
 opencv-python-headless
 gradio
 dill
-accelerate
+acceleratepython 
 timm
 einops==0.8.0
 # paddlepaddle  # Commented out - using only easyocr
@@ -20,6 +20,7 @@ einops==0.8.0
 # LLM/API dependencies (for omnitool - using LM Studio locally)
 openai==1.3.5  # For LM Studio (OpenAI-compatible local API)
 huggingface_hub  # For Hugging Face model access and downloads
+huggingface_hub[hf] 
 # anthropic[bedrock,vertex]>=0.37.1  # Commented out for local LM Studio
 # groq  # Commented out for local LM Studio
 # dashscope  # Commented out for local LM Studio

@@ -97,5 +97,6 @@ demo.launch(
     debug=True,
     server_port=7861,
     server_name='127.0.0.1',
-    show_error=True
+    show_error=True,
+    #share=True
 )

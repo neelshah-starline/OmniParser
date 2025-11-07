@@ -7,7 +7,7 @@ import json
 import base64
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -97,7 +97,7 @@ def list_directory(directory: Path) -> None:
         for f in files:
             print(f"- {f.name}")
 
-def get_filenames_input() -> List[str] | str:
+def get_filenames_input() -> Union[List[str], str]:
     """Prompt for screenshot filenames or commands."""
     raw = input("Enter screenshot filenames (comma-separated), type 'list_dir' to view files, or 'n' to exit: ").strip()
     if raw.lower() == 'n':
