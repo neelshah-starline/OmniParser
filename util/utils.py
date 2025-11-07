@@ -360,9 +360,12 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
         labels=labels,
         image_size=(w, h),
     )
-    # Some annotators draw in-place and return None
+    # Handle different annotator behaviors: some return None (in-place), some return the image
     if _res is not None:
         annotated_frame = _res
+    # Ensure annotated_frame is still valid
+    if annotated_frame is None or not hasattr(annotated_frame, 'shape'):
+        annotated_frame = image_source.copy()
 
     label_coordinates = {f"{phrase}": v for phrase, v in zip(phrases, xywh)}
     return annotated_frame, label_coordinates
