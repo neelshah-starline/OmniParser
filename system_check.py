@@ -76,6 +76,7 @@ def check_key_dependencies():
         ('supervision', 'supervision'),
         ('gradio', 'gradio'),
         ('ultralytics', 'ultralytics'),
+        ('huggingface_hub', 'huggingface_hub'),
     ]
 
     for name, import_name in dependencies:
