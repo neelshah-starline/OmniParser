@@ -122,9 +122,9 @@ def check_huggingface():
     print("🤗 Hugging Face Tools:")
 
     # Check hf command
-    hf_version = run_command("hf --version")
-    if hf_version:
-        print(f"   ✅ Hugging Face CLI: {hf_version}")
+    hf_help = run_command("hf --help")
+    if hf_help and "hf command helpers" in hf_help:
+        print("   ✅ Hugging Face CLI available")
     else:
         print("   ❌ Hugging Face CLI not available")
 
