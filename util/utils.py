@@ -62,9 +62,9 @@ def get_caption_model_processor(model_name, model_name_or_path="Salesforce/blip2
         from transformers import AutoProcessor, AutoModelForCausalLM 
         processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base", trust_remote_code=True)
         if device == 'cpu':
-            model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float32, trust_remote_code=True)
+            model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float32, trust_remote_code=True,attn_implementation="eager")
         else:
-            model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float16, trust_remote_code=True).to(device)
+            model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float16, trust_remote_code=True,attn_implementation="eager").to(device)
     return {'model': model.to(device), 'processor': processor}
 
 
@@ -79,7 +79,7 @@ def get_yolo_model(model_path):
 def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=None, batch_size=128):
     # Number of samples per batch, --> 128 roughly takes 4 GB of GPU memory for florence v2 model
     to_pil = ToPILImage()
-    if starting_idx:
+    if starting_idx is not None and starting_idx >= 0:
         non_ocr_boxes = filtered_boxes[starting_idx:]
     else:
         non_ocr_boxes = filtered_boxes
@@ -93,6 +93,9 @@ def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_
             croped_pil_image.append(to_pil(cropped_image))
         except:
             continue
+
+    if not croped_pil_image:
+        return []
 
     model, processor = caption_model_processor['model'], caption_model_processor['processor']
     if not prompt:
@@ -114,7 +117,10 @@ def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_
         if 'florence' in model.config.name_or_path:
             generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
         else:
-            generated_ids = model.generate(**inputs, max_length=100, num_beams=5, no_repeat_ngram_size=2, early_stopping=True, num_return_sequences=1) # temperature=0.01, do_sample=True,
+            generated_ids = model.generate(
+                **inputs, max_length=100, num_beams=5,
+                no_repeat_ngram_size=2, num_return_sequences=1
+            )
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         generated_text = [gen.strip() for gen in generated_text]
         generated_texts.extend(generated_text)
@@ -348,7 +354,15 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
 
     box_annotator = BoxAnnotator(text_scale=text_scale, text_padding=text_padding,text_thickness=text_thickness,thickness=thickness) # 0.8 for mobile/web, 0.3 for desktop # 0.4 for mind2web
     annotated_frame = image_source.copy()
-    annotated_frame = box_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels, image_size=(w,h))
+    _res = box_annotator.annotate(
+        scene=annotated_frame,
+        detections=detections,
+        labels=labels,
+        image_size=(w, h),
+    )
+    # Some annotators draw in-place and return None
+    if _res is not None:
+        annotated_frame = _res
 
     label_coordinates = {f"{phrase}": v for phrase, v in zip(phrases, xywh)}
     return annotated_frame, label_coordinates
@@ -426,12 +440,14 @@ def get_som_labeled_img(image_source: Union[str, Image.Image], model=None, BOX_T
     # annotate the image with labels
     if ocr_bbox:
         ocr_bbox = torch.tensor(ocr_bbox) / torch.Tensor([w, h, w, h])
-        ocr_bbox=ocr_bbox.tolist()
+        ocr_bbox = ocr_bbox.tolist()
+        ocr_bbox_elem = [
+            {'type': 'text', 'bbox': box, 'interactivity': False, 'content': txt, 'source': 'box_ocr_content_ocr'}
+            for box, txt in zip(ocr_bbox, ocr_text) if int_box_area(box, w, h) > 0
+        ]
     else:
         print('no ocr bbox!!!')
-        ocr_bbox = None
-
-    ocr_bbox_elem = [{'type': 'text', 'bbox':box, 'interactivity':False, 'content':txt, 'source': 'box_ocr_content_ocr'} for box, txt in zip(ocr_bbox, ocr_text) if int_box_area(box, w, h) > 0] 
+        ocr_bbox_elem = []
     xyxy_elem = [{'type': 'icon', 'bbox':box, 'interactivity':True, 'content':None} for box in xyxy.tolist() if int_box_area(box, w, h) > 0]
     filtered_boxes = remove_overlap_new(boxes=xyxy_elem, iou_threshold=iou_threshold, ocr_bbox=ocr_bbox_elem)
     
