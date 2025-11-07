@@ -19,6 +19,7 @@ einops==0.8.0
 
 # LLM/API dependencies (for omnitool - using LM Studio locally)
 openai==1.3.5  # For LM Studio (OpenAI-compatible local API)
+huggingface_hub  # For Hugging Face model access and downloads
 # anthropic[bedrock,vertex]>=0.37.1  # Commented out for local LM Studio
 # groq  # Commented out for local LM Studio
 # dashscope  # Commented out for local LM Studio
