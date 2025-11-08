@@ -1,70 +1,113 @@
 @echo off
-REM Check Python version
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo Error: Python is not installed or not in PATH.
-    echo Please install Python 3.12 and add it to your PATH.
-    pause
-    exit /b 1
-)
+setlocal EnableExtensions
 
-python -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" > temp_pyver.txt 2>nul
-if errorlevel 1 (
-    echo Error: Failed to determine Python version.
-    echo Please ensure Python 3.12 is properly installed.
-    del temp_pyver.txt 2>nul
-    pause
-    exit /b 1
-)
+REM --- Run from the script's directory so paths are predictable ---
+cd /d "%~dp0"
 
-set /p pyver=<temp_pyver.txt
-del temp_pyver.txt
-
-if not "%pyver:~0,1%"=="3" (
-    echo Error: This script requires Python 3.12 or higher.
-    echo Current Python version: %pyver%
-    echo Please install Python 3.12 or higher and ensure it's the default python command.
-    pause
-    exit /b 1
-)
-
-if "%pyver:~2%" lss "12" (
-    echo Error: This script requires Python 3.12 or higher.
-    echo Current Python version: %pyver%
-    echo Please install Python 3.12 or higher and ensure it's the default python command.
-    pause
-    exit /b 1
-)
-
-echo Downloading OmniParser model weights...
+echo.
+echo === OmniParser weights bootstrap (requires Python 3.12+) ===
 echo.
 
-REM Temporarily modify PATH to prioritize Python Scripts directory
-for /f "delims=" %%i in ('python -c "import sys, os; print(os.path.join(sys.exec_prefix, 'Scripts'))"') do set "PYTHON_SCRIPTS=%%i"
-set "PATH=%PYTHON_SCRIPTS%;%PATH%"
+REM --- Select a Python that is >= 3.12 (tries several candidates) ---
+set "PY_CMD="
 
-REM Create weights directory if it doesn't exist
-if not exist weights mkdir weights
+where py >nul 2>&1
+if not errorlevel 1 (
+    py -3.13 -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" >nul 2>&1 && set "PY_CMD=py -3.13"
+    if not defined PY_CMD (
+        py -3.12 -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" >nul 2>&1 && set "PY_CMD=py -3.12"
+    )
+    if not defined PY_CMD (
+        py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" >nul 2>&1 && set "PY_CMD=py -3"
+    )
+)
 
-REM Download icon detection model files
-echo Downloading icon detection model files...
-hf download microsoft/OmniParser-v2.0 icon_detect/train_args.yaml --local-dir weights
-hf download microsoft/OmniParser-v2.0 icon_detect/model.pt --local-dir weights
-hf download microsoft/OmniParser-v2.0 icon_detect/model.yaml --local-dir weights
+if not defined PY_CMD (
+    where python >nul 2>&1 && (
+        python -c "import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)" >nul 2>&1 && set "PY_CMD=python"
+    )
+)
 
-REM Download icon caption model files
+if not defined PY_CMD (
+    call :err "Python 3.12+ is required but not found. Install Python 3.12 or newer and ensure it is on PATH (or available via 'py')."
+    exit /b 1
+)
+
+for /f "delims=" %%V in ('%PY_CMD% -c "import sys;print(sys.version.split()[0])" 2^>nul') do set "CUR_PY_VER=%%V"
+echo Using Python: %PY_CMD%  (version %CUR_PY_VER%)
 echo.
-echo Downloading icon caption model files...
-hf download microsoft/OmniParser-v2.0 icon_caption/config.json --local-dir weights
-hf download microsoft/OmniParser-v2.0 icon_caption/generation_config.json --local-dir weights
-hf download microsoft/OmniParser-v2.0 icon_caption/model.safetensors --local-dir weights
 
-REM Move the icon_caption directory to icon_caption_florence
+REM --- Ensure Hugging Face CLI is available ---
+where hf >nul 2>&1
+if errorlevel 1 (
+    echo "hf" CLI not found. Installing huggingface_hub[cli]...
+    %PY_CMD% -m pip install --upgrade "huggingface_hub[cli]"
+    if errorlevel 1 (
+        call :err "Failed to install huggingface_hub CLI. Check internet/proxy and try again."
+        exit /b 1
+    )
+)
+
+REM --- Temporarily prepend likely Scripts paths to PATH (session only) ---
+for /f "delims=" %%S in ('%PY_CMD% -c "import sys,site,os; print(os.path.join(sys.exec_prefix, \"Scripts\")); u=site.getusersitepackages(); print(os.path.join(os.path.dirname(u), \"Scripts\"))"') do (
+    if exist "%%~S" set "PATH=%%~S;%PATH%"
+)
+
+REM --- Verify hf is callable now ---
+where hf >nul 2>&1
+if errorlevel 1 (
+    call :err "The 'hf' CLI is not on PATH after installation. Try opening a new terminal or add your Python Scripts folder to PATH."
+    exit /b 1
+)
+
+REM --- Download weights ---
+set "WDIR=%cd%\weights"
+if not exist "%WDIR%" mkdir "%WDIR%"
+
+set "REPO=microsoft/OmniParser-v2.0"
+REM Optional: pin to a specific revision by adding: --revision <tag-or-commit>
+echo Downloading model files from %REPO% into:
+echo   %WDIR%
+echo.
+
+hf download %REPO% --local-dir "%WDIR%" --local-dir-use-symlinks False ^
+  --include "icon_detect/train_args.yaml,icon_detect/model.pt,icon_detect/model.yaml,icon_caption/config.json,icon_caption/generation_config.json,icon_caption/model.safetensors"
+
+if errorlevel 1 (
+    call :err "Download failed. Check network/permissions and try again."
+    exit /b 1
+)
+
+REM --- Organize: rename icon_caption -> icon_caption_florence ---
 echo.
 echo Organizing directories...
-move weights\icon_caption weights\icon_caption_florence
+if exist "%WDIR%\icon_caption" (
+    if exist "%WDIR%\icon_caption_florence" (
+        echo Removing existing "%WDIR%\icon_caption_florence"...
+        rmdir /s /q "%WDIR%\icon_caption_florence"
+        if errorlevel 1 (
+            call :err "Failed to remove existing icon_caption_florence directory."
+            exit /b 1
+        )
+    )
+    move "%WDIR%\icon_caption" "%WDIR%\icon_caption_florence" >nul
+    if errorlevel 1 (
+        call :err "Failed to move icon_caption to icon_caption_florence."
+        exit /b 1
+    )
+) else (
+    echo NOTE: "%WDIR%\icon_caption" not found. Skipping rename.
+)
 
 echo.
-echo Download complete! Model weights are ready.
+echo Download complete! Model weights are ready here:
+echo   %WDIR%
 echo.
 pause
+exit /b 0
+
+:err
+echo.
+echo ERROR: %~1
+echo.
+goto :eof

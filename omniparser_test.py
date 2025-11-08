@@ -20,7 +20,7 @@ from util.utils import check_ocr_box, get_yolo_model, get_caption_model_processo
 os.environ["OMP_NUM_THREADS"] = "1"
 
 # Initialize models
-yolo_model = get_yolo_model(motdel_path='weights/icon_detect/model.pt')
+yolo_model = get_yolo_model(model_path='weights/icon_detect/model.pt')
 caption_model_processor = get_caption_model_processor(model_name="florence2", model_name_or_path="weights/icon_caption_florence")
 
 # Setup logging
