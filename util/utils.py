@@ -120,7 +120,12 @@ def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_
         else:
             inputs = processor(images=batch, text=[prompt]*len(batch), return_tensors="pt").to(device=device)
         if 'florence' in model.config.name_or_path:
-            generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False, early_stopping=False)
+            try:
+                generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False, early_stopping=False)
+            except Exception as e:
+                print(f"Florence generation failed: {e}, returning empty captions")
+                # Return empty tokens for failed generations
+                generated_ids = torch.tensor([[processor.tokenizer.eos_token_id]] * len(batch))
         else:
             generated_ids = model.generate(
                 **inputs, max_length=100, num_beams=5,
