@@ -107,9 +107,13 @@ def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_
     
     generated_texts = []
     device = model.device
-    for i in range(0, len(croped_pil_image), batch_size):
+
+    # Use batch_size=1 for Florence models since they don't support batched generation properly
+    effective_batch_size = 1 if 'florence' in model.config.name_or_path else batch_size
+
+    for i in range(0, len(croped_pil_image), effective_batch_size):
         start = time.time()
-        batch = croped_pil_image[i:i+batch_size]
+        batch = croped_pil_image[i:i+effective_batch_size]
         t1 = time.time()
         if model.device.type == 'cuda':
             inputs = processor(images=batch, text=[prompt]*len(batch), return_tensors="pt", do_resize=False).to(device=device, dtype=torch.float16)
